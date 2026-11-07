@@ -1,17 +1,25 @@
 from __future__ import annotations
 
 import sqlite3
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
+
+from app.core.paths import app_data_dir
 
 
 class Database:
     """SQLite helper for app state and download history."""
 
-    def __init__(self, database_path: str | Path | None = None):
-        base_path = Path(database_path) if database_path is not None else Path(__file__).resolve().parents[2] / "app_data"
-        base_path.mkdir(parents=True, exist_ok=True)
+    DEFAULT_FILENAME = "downloads.db"
 
-        self.database_path = base_path / "downloads.db" if base_path.suffix != ".db" else base_path
+    def __init__(self, database_path: str | Path | None = None):
+        path = Path(database_path) if database_path is not None else app_data_dir()
+        if path.suffix != ".db":
+            path = path / self.DEFAULT_FILENAME
+        path.parent.mkdir(parents=True, exist_ok=True)
+
+        self.database_path = path
         self._initialize()
 
     def _initialize(self):
@@ -33,9 +41,17 @@ class Database:
                 )
                 """
             )
-            conn.commit()
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_downloads_file_path ON downloads (file_path)"
+            )
 
-    def connection(self):
+    @contextmanager
+    def connection(self) -> Iterator[sqlite3.Connection]:
+        """Yield a connection that commits on success, rolls back on error and is always closed."""
         conn = sqlite3.connect(self.database_path)
         conn.row_factory = sqlite3.Row
-        return conn
+        try:
+            with conn:
+                yield conn
+        finally:
+            conn.close()
