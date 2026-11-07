@@ -1,12 +1,13 @@
-# Gera o LHyper.exe e publica uma Release no GitHub.
+# Gera o instalador (LHyper-<versão>-Setup.exe) e a versão portátil (.zip)
+# e publica uma Release no GitHub.
 #
 # Lançar uma versão:
-#   1. Atualize APP_VERSION em app/core/constants.py (ex.: "0.2.6") e faça commit.
-#   2. git tag v0.2.6
+#   1. Atualize APP_VERSION em app/core/constants.py (ex.: "0.2.7") e faça commit.
+#   2. git tag v0.2.7
 #   3. git push origin main --tags
 #
 # Também pode ser rodado manualmente (aba Actions → Release → Run workflow):
-# nesse caso o .zip fica só como artefato do workflow, sem criar Release.
+# nesse caso os arquivos ficam só como artefatos do workflow, sem criar Release.
 
 name: Release
 
@@ -57,17 +58,65 @@ jobs:
       - name: Build do executável
         run: python -m PyInstaller LHyper.spec --noconfirm
 
-      - name: Teste de fumaça do executável
+      # ------------------------------------------------------------ instalador
+      - name: Gerar instalador
+        id: installer
         shell: pwsh
         run: |
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) {
+            choco install innosetup -y --no-progress
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
+          python installer\make_wizard_images.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & $iscc "/DAppVersion=${{ steps.version.outputs.version }}" installer\LHyper.iss
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          "setup=dist\LHyper-${{ steps.version.outputs.version }}-Setup.exe" >> $env:GITHUB_OUTPUT
+
+      - name: Testar instalador (instalar, abrir, desinstalar)
+        shell: pwsh
+        run: |
+          $installDir = Join-Path $env:LOCALAPPDATA "Programs\LHyper"
+          $desktopLnk = Join-Path ([Environment]::GetFolderPath("Desktop")) "LHyper.lnk"
+          $startLnk = Join-Path ([Environment]::GetFolderPath("Programs")) "LHyper.lnk"
+          $dataDir = Join-Path $env:LOCALAPPDATA "LHyper"
+          function Fail($message) { Write-Error $message; exit 1 }
+
+          $setup = Start-Process "${{ steps.installer.outputs.setup }}" -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/CURRENTUSER" -PassThru -Wait
+          if ($setup.ExitCode -ne 0) { Fail "O instalador terminou com código $($setup.ExitCode)." }
+          if (-not (Test-Path "$installDir\LHyper.exe")) { Fail "LHyper.exe não foi instalado em $installDir." }
+          if (-not (Test-Path $desktopLnk)) { Fail "O atalho da área de trabalho não foi criado." }
+          if (-not (Test-Path $startLnk)) { Fail "O atalho do menu Iniciar não foi criado." }
+
+          $app = Start-Process "$installDir\LHyper.exe" -PassThru
+          Start-Sleep -Seconds 15
+          if ($app.HasExited) { Fail "O app instalado encerrou logo após abrir (código $($app.ExitCode))." }
+          if (-not (Test-Path "$dataDir\downloads.db")) { Fail "O app instalado não criou o banco em $dataDir." }
+          if (Test-Path "$installDir\app_data") { Fail "O app instalado gravou dados na pasta de instalação." }
+          Stop-Process -Id $app.Id -Force
+          Start-Sleep -Seconds 2
+
+          $uninstall = Start-Process "$installDir\unins000.exe" -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART" -PassThru -Wait
+          Start-Sleep -Seconds 3
+          if ($uninstall.ExitCode -ne 0) { Fail "O desinstalador terminou com código $($uninstall.ExitCode)." }
+          if (Test-Path "$installDir\LHyper.exe") { Fail "O desinstalador não removeu o app." }
+          if ((Test-Path $desktopLnk) -or (Test-Path $startLnk)) { Fail "O desinstalador não removeu os atalhos." }
+
+      # ------------------------------------------------------------ portátil
+      - name: Preparar e testar versão portátil
+        shell: pwsh
+        run: |
+          # O marcador faz o app guardar downloads e histórico na própria pasta.
+          Set-Content -Path "dist\LHyper\portable.txt" -Encoding utf8 -Value "Versão portátil do LHyper: os downloads e o histórico ficam nesta pasta."
           $app = Start-Process -FilePath "dist\LHyper\LHyper.exe" -PassThru
           Start-Sleep -Seconds 15
           if ($app.HasExited) {
-            Write-Error "LHyper.exe encerrou logo após abrir (código $($app.ExitCode))."
+            Write-Error "LHyper.exe portátil encerrou logo após abrir (código $($app.ExitCode))."
             exit 1
           }
           if (-not (Test-Path "dist\LHyper\app_data\downloads.db")) {
-            Write-Error "LHyper.exe não criou o banco de dados."
+            Write-Error "LHyper.exe portátil não criou o banco ao lado do executável."
             exit 1
           }
           Stop-Process -Id $app.Id -Force
@@ -75,19 +124,21 @@ jobs:
           # Não distribuir dados gerados pelo teste.
           Remove-Item -Recurse -Force "dist\LHyper\app_data", "dist\LHyper\downloads" -ErrorAction SilentlyContinue
 
-      - name: Compactar
+      - name: Compactar versão portátil
         id: package
         shell: pwsh
         run: |
-          $zip = "LHyper-${{ steps.version.outputs.version }}-windows.zip"
+          $zip = "dist\LHyper-${{ steps.version.outputs.version }}-portatil.zip"
           Compress-Archive -Path "dist\LHyper" -DestinationPath $zip
           "zip=$zip" >> $env:GITHUB_OUTPUT
 
-      - name: Guardar artefato
+      - name: Guardar artefatos
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ steps.package.outputs.zip }}
-          path: ${{ steps.package.outputs.zip }}
+          name: LHyper-${{ steps.version.outputs.version }}
+          path: |
+            ${{ steps.installer.outputs.setup }}
+            ${{ steps.package.outputs.zip }}
 
       - name: Publicar Release
         if: github.ref_type == 'tag'
@@ -95,23 +146,25 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          $version = "${{ steps.version.outputs.version }}"
           $notes = @"
           ## Como instalar
 
-          1. **Baixe:** clique em **${{ steps.package.outputs.zip }}**, logo abaixo, em *Assets*. Não clique em "Source code".
-          2. **Extraia:** na pasta Downloads, clique com o botão direito no arquivo → **Extrair Tudo...** → **Procurar...** → escolha **Documentos** → **Extrair**.
-          3. **Abra:** em **Documentos → LHyper**, dê dois cliques em **LHyper.exe**. Se aparecer *"O Windows protegeu o computador"*, clique em **Mais informações → Executar assim mesmo** (só na primeira vez).
-          4. **Atalho na área de trabalho:** clique com o botão direito em **LHyper.exe** → **Mostrar mais opções** (Windows 11) → **Enviar para → Área de trabalho (criar atalho)**.
+          1. **Baixe** o instalador: clique em **LHyper-$version-Setup.exe**, logo abaixo, em *Assets*. Não clique em "Source code".
+          2. **Abra** o arquivo baixado (na pasta Downloads). Se aparecer *"O Windows protegeu o computador"*, clique em **Mais informações → Executar assim mesmo**.
+          3. Clique em **Avançar** até o fim. Pronto: o LHyper aparece na **área de trabalho** e no **menu Iniciar**.
 
-          ⚠️ Não arraste o LHyper.exe para fora da pasta: ele precisa da pasta ``_internal`` ao lado. Use o atalho.
+          Os vídeos e músicas baixados ficam em **Downloads → LHyper**.
 
           **MP3:** para converter para MP3, instale o FFmpeg: clique com o botão direito no Iniciar → **Terminal** → cole ``winget install Gyan.FFmpeg`` → Enter.
 
-          **Atualizar:** extraia a versão nova em **Documentos** e confirme **Substituir**. Seus downloads (em ``Documentos\LHyper\downloads``) são mantidos.
+          **Atualizar:** baixe e abra o instalador da versão nova. Seus downloads e o histórico são mantidos.
 
-          Guia completo, passo a passo: https://github.com/LucasBrandalise/LHyper#como-instalar-sem-precisar-entender-de-github
+          **Versão portátil** (sem instalar, para pendrive): baixe **LHyper-$version-portatil.zip**, clique com o botão direito → **Extrair Tudo...** e abra o **LHyper.exe** da pasta extraída. Nessa versão os downloads ficam dentro da própria pasta.
+
+          Guia completo: https://github.com/LucasBrandalise/LHyper#como-instalar-sem-precisar-entender-de-github
           "@
-          gh release create "$env:GITHUB_REF_NAME" "${{ steps.package.outputs.zip }}" `
+          gh release create "$env:GITHUB_REF_NAME" "${{ steps.installer.outputs.setup }}" "${{ steps.package.outputs.zip }}" `
             --title "LHyper $env:GITHUB_REF_NAME" `
             --notes "$notes" `
             --generate-notes

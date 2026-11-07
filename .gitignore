@@ -16,3 +16,4 @@ Claude outputs/
 *.lnk
 build/
 dist/
+installer/build/
