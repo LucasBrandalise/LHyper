@@ -6,6 +6,16 @@ Aplicativo desktop em Python + PySide6 para baixar vídeos do YouTube em MP4 ou 
 
 0.2.5
 
+## Baixar o executável (mais fácil)
+
+1. Abra a página de [Releases](https://github.com/LucasBrandalise/LHyper/releases/latest) e baixe o arquivo `LHyper-<versão>-windows.zip`.
+2. Extraia o `.zip` em uma pasta de sua escolha e abra o **LHyper.exe**.
+3. Para baixar MP3 (e vídeos na melhor qualidade), instale o FFmpeg: `winget install Gyan.FFmpeg`.
+
+Na primeira vez o Windows pode mostrar *"O Windows protegeu o computador"*, porque o app não é assinado digitalmente. Clique em **Mais informações → Executar assim mesmo**.
+
+Para rodar a partir do código-fonte, siga a instalação abaixo.
+
 ## Requisitos
 
 - Windows 10 ou 11
@@ -101,3 +111,26 @@ Os testes usam apenas `unittest` (biblioteca padrão) e rodam sem rede nem janel
 ```bash
 .venv\Scripts\python.exe -m unittest discover -s tests -t .
 ```
+
+## Lançar uma nova versão
+
+O workflow [`.github/workflows/release.yml`](.github/workflows/release.yml) roda os testes, gera o `LHyper.exe` com PyInstaller, confere se ele abre e publica a Release com o `.zip`.
+
+1. Atualize `APP_VERSION` em `app/core/constants.py` (ex.: `0.2.6`) e a versão no topo deste README, e faça commit.
+2. Crie e envie a tag com o mesmo número:
+
+   ```bash
+   git tag v0.2.6
+   git push origin main --tags
+   ```
+
+O build falha se a tag não bater com `APP_VERSION`. Cada build instala o yt-dlp mais recente, então quando o YouTube mudar algo e os downloads pararem, basta lançar uma versão nova.
+
+Para gerar o executável localmente:
+
+```bash
+.venv\Scripts\python.exe -m pip install pyinstaller
+.venv\Scripts\python.exe -m PyInstaller LHyper.spec --noconfirm
+```
+
+O resultado fica em `dist\LHyper\`.

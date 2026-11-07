@@ -1,0 +1,112 @@
+# Gera o LHyper.exe e publica uma Release no GitHub.
+#
+# Lançar uma versão:
+#   1. Atualize APP_VERSION em app/core/constants.py (ex.: "0.2.6") e faça commit.
+#   2. git tag v0.2.6
+#   3. git push origin main --tags
+#
+# Também pode ser rodado manualmente (aba Actions → Release → Run workflow):
+# nesse caso o .zip fica só como artefato do workflow, sem criar Release.
+
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    env:
+      QT_QPA_PLATFORM: offscreen
+      PYTHONUTF8: "1"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+          cache: pip
+
+      - name: Ler versão do app
+        id: version
+        shell: pwsh
+        run: |
+          $version = python -c "from app.core.constants import APP_VERSION; print(APP_VERSION)"
+          "version=$version" >> $env:GITHUB_OUTPUT
+          if ($env:GITHUB_REF_TYPE -eq "tag" -and $env:GITHUB_REF_NAME -ne "v$version") {
+            Write-Error "A tag $env:GITHUB_REF_NAME não bate com APP_VERSION ($version). Atualize app/core/constants.py."
+            exit 1
+          }
+
+      # O yt-dlp não é fixado de propósito: cada build sai com a versão mais nova,
+      # que é a que acompanha as mudanças do YouTube.
+      - name: Instalar dependências
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt "pyinstaller==6.22.3"
+
+      - name: Testes
+        run: python -m unittest discover -s tests -t . -v
+
+      - name: Build do executável
+        run: python -m PyInstaller LHyper.spec --noconfirm
+
+      - name: Teste de fumaça do executável
+        shell: pwsh
+        run: |
+          $app = Start-Process -FilePath "dist\LHyper\LHyper.exe" -PassThru
+          Start-Sleep -Seconds 15
+          if ($app.HasExited) {
+            Write-Error "LHyper.exe encerrou logo após abrir (código $($app.ExitCode))."
+            exit 1
+          }
+          if (-not (Test-Path "dist\LHyper\app_data\downloads.db")) {
+            Write-Error "LHyper.exe não criou o banco de dados."
+            exit 1
+          }
+          Stop-Process -Id $app.Id -Force
+          Start-Sleep -Seconds 2
+          # Não distribuir dados gerados pelo teste.
+          Remove-Item -Recurse -Force "dist\LHyper\app_data", "dist\LHyper\downloads" -ErrorAction SilentlyContinue
+
+      - name: Compactar
+        id: package
+        shell: pwsh
+        run: |
+          $zip = "LHyper-${{ steps.version.outputs.version }}-windows.zip"
+          Compress-Archive -Path "dist\LHyper" -DestinationPath $zip
+          "zip=$zip" >> $env:GITHUB_OUTPUT
+
+      - name: Guardar artefato
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.package.outputs.zip }}
+          path: ${{ steps.package.outputs.zip }}
+
+      - name: Publicar Release
+        if: github.ref_type == 'tag'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $notes = @"
+          ## Instalação
+
+          1. Baixe **${{ steps.package.outputs.zip }}** abaixo e extraia em uma pasta de sua escolha.
+          2. Abra **LHyper.exe**.
+          3. Para baixar MP3 (e vídeos na melhor qualidade), instale o FFmpeg: ``winget install Gyan.FFmpeg``.
+
+          Na primeira vez o Windows pode mostrar *"O Windows protegeu o computador"*, porque o app não é assinado digitalmente. Clique em **Mais informações → Executar assim mesmo**.
+
+          Os downloads ficam na pasta ``downloads`` ao lado do LHyper.exe.
+          "@
+          gh release create "$env:GITHUB_REF_NAME" "${{ steps.package.outputs.zip }}" `
+            --title "LHyper $env:GITHUB_REF_NAME" `
+            --notes "$notes" `
+            --generate-notes
