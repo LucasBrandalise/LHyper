@@ -13,6 +13,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from app.core.models import DownloadRecord
+from app.database.download_repository import DownloadRepository
 from app.services.youtube_service import YouTubeService
 from app.ui.tabs.downloads_tab import DownloadsTab
 from app.ui.tabs.preview_tab import PreviewTab
@@ -26,11 +28,16 @@ class MainWindow(QMainWindow):
 
         self.output_dir = str(Path(__file__).resolve().parents[2] / "downloads")
         self.service = YouTubeService()
+        self.repository = DownloadRepository()
+        self.repository.sync_from_disk(self.output_dir)
         self.worker = None
         self.worker_thread = None
+        self.current_download_title = ""
+        self.current_download_url = ""
+        self.current_download_format = "mp4"
 
         self.preview_tab = PreviewTab(self.output_dir)
-        self.downloads_tab = DownloadsTab(self.output_dir)
+        self.downloads_tab = DownloadsTab(self.output_dir, self.repository)
 
         self.setWindowTitle("YT Downloader")
         self.resize(1100, 720)
@@ -58,11 +65,13 @@ class MainWindow(QMainWindow):
         sidebar_layout.addSpacing(30)
 
         nav_items = ["Início", "Downloads", "Histórico", "Configurações"]
-        for index, name in enumerate(nav_items):
+        for name in nav_items:
             button = QPushButton(name)
             button.setObjectName("nav_button")
-            target_index = 0 if name == "Início" else 1 if name == "Downloads" else 0
-            button.clicked.connect(lambda checked, idx=target_index: self.tab_widget.setCurrentIndex(idx))
+            if name == "Início":
+                button.clicked.connect(lambda checked, idx=0: self.tab_widget.setCurrentIndex(idx))
+            elif name == "Downloads":
+                button.clicked.connect(lambda checked, idx=1: self.tab_widget.setCurrentIndex(idx))
             sidebar_layout.addWidget(button)
 
         sidebar_layout.addStretch()
@@ -88,7 +97,14 @@ class MainWindow(QMainWindow):
         url = self.preview_tab.get_url()
         try:
             self.service.validate_url(url)
+            info = self.service.extract_info(url)
+            self.current_download_title = info.title
+            self.current_download_url = url
+            self.current_download_format = self.preview_tab.get_format().split(" - ", 1)[0].lower()
         except ValueError as exc:
+            self.preview_tab.set_status(str(exc))
+            return
+        except Exception as exc:
             self.preview_tab.set_status(str(exc))
             return
 
@@ -127,6 +143,25 @@ class MainWindow(QMainWindow):
         self.preview_tab.set_status(message)
         self.preview_tab.set_progress_visible(False)
         self.preview_tab.set_button_enabled(True)
+
+        if self.worker and getattr(self.worker, "output_path", ""):
+            file_path = self.worker.output_path
+            file_size = Path(file_path).stat().st_size if Path(file_path).exists() else 0
+            record = DownloadRecord(
+                id=None,
+                title=self.current_download_title or Path(file_path).stem,
+                url=self.current_download_url,
+                thumbnail=None,
+                file_path=file_path,
+                file_size=file_size,
+                file_format=self.current_download_format,
+                status="completed",
+                created_at=None,
+                updated_at=None,
+                error_message=None,
+            )
+            self.repository.add_or_update(record)
+
         self.downloads_tab.refresh()
         self.worker = None
         self.worker_thread = None
@@ -135,6 +170,23 @@ class MainWindow(QMainWindow):
         self.preview_tab.set_status(message)
         self.preview_tab.set_progress_visible(False)
         self.preview_tab.set_button_enabled(True)
+
+        if self.current_download_url:
+            record = DownloadRecord(
+                id=None,
+                title=self.current_download_title or "Erro no download",
+                url=self.current_download_url,
+                thumbnail=None,
+                file_path="",
+                file_size=0,
+                file_format=self.current_download_format,
+                status="error",
+                created_at=None,
+                updated_at=None,
+                error_message=message,
+            )
+            self.repository.add_or_update(record)
+
         self.downloads_tab.refresh()
         self.worker = None
         self.worker_thread = None
