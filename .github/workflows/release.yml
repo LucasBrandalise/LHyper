@@ -96,15 +96,20 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           $notes = @"
-          ## Instalação
+          ## Como instalar
 
-          1. Baixe **${{ steps.package.outputs.zip }}** abaixo e extraia em uma pasta de sua escolha.
-          2. Abra **LHyper.exe**.
-          3. Para baixar MP3 (e vídeos na melhor qualidade), instale o FFmpeg: ``winget install Gyan.FFmpeg``.
+          1. **Baixe:** clique em **${{ steps.package.outputs.zip }}**, logo abaixo, em *Assets*. Não clique em "Source code".
+          2. **Extraia:** na pasta Downloads, clique com o botão direito no arquivo → **Extrair Tudo...** → **Procurar...** → escolha **Documentos** → **Extrair**.
+          3. **Abra:** em **Documentos → LHyper**, dê dois cliques em **LHyper.exe**. Se aparecer *"O Windows protegeu o computador"*, clique em **Mais informações → Executar assim mesmo** (só na primeira vez).
+          4. **Atalho na área de trabalho:** clique com o botão direito em **LHyper.exe** → **Mostrar mais opções** (Windows 11) → **Enviar para → Área de trabalho (criar atalho)**.
 
-          Na primeira vez o Windows pode mostrar *"O Windows protegeu o computador"*, porque o app não é assinado digitalmente. Clique em **Mais informações → Executar assim mesmo**.
+          ⚠️ Não arraste o LHyper.exe para fora da pasta: ele precisa da pasta ``_internal`` ao lado. Use o atalho.
 
-          Os downloads ficam na pasta ``downloads`` ao lado do LHyper.exe.
+          **MP3:** para converter para MP3, instale o FFmpeg: clique com o botão direito no Iniciar → **Terminal** → cole ``winget install Gyan.FFmpeg`` → Enter.
+
+          **Atualizar:** extraia a versão nova em **Documentos** e confirme **Substituir**. Seus downloads (em ``Documentos\LHyper\downloads``) são mantidos.
+
+          Guia completo, passo a passo: https://github.com/LucasBrandalise/LHyper#como-instalar-sem-precisar-entender-de-github
           "@
           gh release create "$env:GITHUB_REF_NAME" "${{ steps.package.outputs.zip }}" `
             --title "LHyper $env:GITHUB_REF_NAME" `

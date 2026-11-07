@@ -6,15 +6,63 @@ Aplicativo desktop em Python + PySide6 para baixar vídeos do YouTube em MP4 ou 
 
 0.2.6
 
-## Baixar o executável (mais fácil)
+## Como instalar (sem precisar entender de GitHub)
 
-1. Abra a página de [Releases](https://github.com/LucasBrandalise/LHyper/releases/latest) e baixe o arquivo `LHyper-<versão>-windows.zip`.
-2. Extraia o `.zip` em uma pasta de sua escolha e abra o **LHyper.exe**.
-3. Para baixar MP3 (e vídeos na melhor qualidade), instale o FFmpeg: `winget install Gyan.FFmpeg`.
+### 1. Baixe o app
 
-Na primeira vez o Windows pode mostrar *"O Windows protegeu o computador"*, porque o app não é assinado digitalmente. Clique em **Mais informações → Executar assim mesmo**.
+1. Abra a página da [versão mais recente](https://github.com/LucasBrandalise/LHyper/releases/latest).
+2. Role até o fim, na parte **Assets**, e clique em **LHyper-…-windows.zip**.
+   Não clique em "Source code": aquilo é o código-fonte, não o app.
 
-Para rodar a partir do código-fonte, siga a instalação abaixo.
+### 2. Extraia (passo obrigatório)
+
+1. Abra a pasta **Downloads** e encontre o arquivo `LHyper-…-windows.zip`.
+2. Clique nele com o botão direito e escolha **Extrair Tudo...**.
+3. Em vez de deixar na pasta Downloads, troque o destino para **Documentos**: clique em **Procurar...**, escolha **Documentos** e depois **Extrair**.
+
+> ⚠️ Não abra o app de dentro do `.zip` sem extrair: assim ele não funciona e mostra uma mensagem de erro.
+
+### 3. Abra pela primeira vez
+
+1. Na pasta extraída (**Documentos → LHyper**), dê dois cliques em **LHyper.exe**.
+2. Se aparecer a tela azul *"O Windows protegeu o computador"*, clique em **Mais informações** e depois em **Executar assim mesmo**. Isso só acontece na primeira vez, porque o app ainda não tem assinatura digital.
+
+### 4. Crie um atalho na área de trabalho
+
+1. Na pasta **Documentos → LHyper**, clique com o botão direito em **LHyper.exe**.
+2. No Windows 11, clique em **Mostrar mais opções**; no Windows 10, pule este passo.
+3. Escolha **Enviar para → Área de trabalho (criar atalho)**.
+
+Pronto: o ícone do LHyper aparece na área de trabalho.
+
+> ⚠️ Não arraste o `LHyper.exe` para a área de trabalho: ele precisa ficar junto da pasta `_internal` para funcionar. Use sempre o atalho.
+
+**Fixar na barra de tarefas (opcional):** com o app aberto, clique com o botão direito no ícone dele na barra de tarefas e escolha **Fixar na barra de tarefas**.
+
+### 5. Para baixar MP3 (opcional)
+
+Para converter para MP3 (e baixar vídeos na melhor qualidade), o app precisa do FFmpeg:
+
+1. Clique com o botão direito no botão **Iniciar** e escolha **Terminal** (ou **Windows PowerShell**).
+2. Cole o comando abaixo e aperte **Enter**:
+
+   ```
+   winget install Gyan.FFmpeg
+   ```
+
+3. Quando terminar, feche e abra o LHyper de novo.
+
+### Onde ficam os arquivos baixados?
+
+Na pasta **downloads**, dentro da pasta do app (**Documentos → LHyper → downloads**).
+
+### Como atualizar para uma versão nova
+
+Baixe e extraia a versão nova por cima da antiga, na mesma pasta (**Documentos**), e confirme **Substituir** quando o Windows perguntar. Seus downloads e o histórico são mantidos, e o atalho continua funcionando.
+
+---
+
+Para rodar a partir do código-fonte (desenvolvedores), siga a instalação abaixo.
 
 ## Requisitos
 
