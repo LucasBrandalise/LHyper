@@ -1,21 +1,33 @@
 
+from pathlib import Path
+
+from PySide6.QtCore import QThread
 from PySide6.QtWidgets import (
-    QMainWindow,
-    QWidget,
-    QVBoxLayout,
+    QComboBox,
+    QFrame,
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QMainWindow,
+    QProgressBar,
     QPushButton,
-    QComboBox,
-    QFrame,
+    QVBoxLayout,
+    QWidget,
 )
+
+from app.services.youtube_service import YouTubeService
+from app.workers.download_worker import DownloadWorker
 
 
 class MainWindow(QMainWindow):
 
     def __init__(self):
         super().__init__()
+
+        self.output_dir = str(Path(__file__).resolve().parents[2] / "downloads")
+        self.service = YouTubeService()
+        self.worker = None
+        self.worker_thread = None
 
         self.setWindowTitle("YT Downloader")
         self.resize(1100, 720)
@@ -32,7 +44,6 @@ class MainWindow(QMainWindow):
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.setSpacing(0)
 
-        # Sidebar
         sidebar = QFrame()
         sidebar.setObjectName("sidebar")
         sidebar.setFixedWidth(220)
@@ -56,7 +67,6 @@ class MainWindow(QMainWindow):
         version.setObjectName("version")
         sidebar_layout.addWidget(version)
 
-        # Main content
         content = QWidget()
         content_layout = QVBoxLayout(content)
         content_layout.setContentsMargins(40, 35, 40, 35)
@@ -65,24 +75,30 @@ class MainWindow(QMainWindow):
         title = QLabel("Baixe seus conteúdos.")
         title.setObjectName("title")
 
-        subtitle = QLabel(
-            "Cole um link do YouTube para começar."
-        )
+        subtitle = QLabel("Cole um link do YouTube para começar.")
         subtitle.setObjectName("subtitle")
 
         self.url_input = QLineEdit()
-        self.url_input.setPlaceholderText(
-            "https://www.youtube.com/watch?v=..."
-        )
+        self.url_input.setPlaceholderText("https://www.youtube.com/watch?v=...")
         self.url_input.setMinimumHeight(48)
+        self.url_input.returnPressed.connect(self.handle_download)
 
         self.format_select = QComboBox()
         self.format_select.addItems(["MP4 - Vídeo", "MP3 - Áudio"])
         self.format_select.setMinimumHeight(42)
 
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setRange(0, 100)
+        self.progress_bar.setValue(0)
+        self.progress_bar.setVisible(False)
+
+        self.status_label = QLabel("Pronto para começar.")
+        self.status_label.setObjectName("status_label")
+
         self.download_button = QPushButton("Analisar conteúdo")
         self.download_button.setObjectName("primary_button")
         self.download_button.setMinimumHeight(48)
+        self.download_button.clicked.connect(self.handle_download)
 
         content_layout.addWidget(title)
         content_layout.addWidget(subtitle)
@@ -91,6 +107,8 @@ class MainWindow(QMainWindow):
         content_layout.addWidget(self.url_input)
         content_layout.addWidget(QLabel("FORMATO"))
         content_layout.addWidget(self.format_select)
+        content_layout.addWidget(self.progress_bar)
+        content_layout.addWidget(self.status_label)
         content_layout.addWidget(self.download_button)
 
         content_layout.addSpacing(35)
@@ -103,6 +121,62 @@ class MainWindow(QMainWindow):
 
         main_layout.addWidget(sidebar)
         main_layout.addWidget(content)
+
+    def handle_download(self):
+        if self.worker_thread is not None and self.worker_thread.isRunning():
+            return
+
+        url = self.url_input.text().strip()
+        try:
+            self.service.validate_url(url)
+        except ValueError as exc:
+            self.status_label.setText(str(exc))
+            return
+
+        self.status_label.setText("Preparando download...")
+        self.download_button.setEnabled(False)
+        self.progress_bar.setValue(0)
+        self.progress_bar.setVisible(True)
+
+        self.worker = DownloadWorker(url, self.format_select.currentText(), self.output_dir)
+        self.worker_thread = QThread(self)
+
+        self.worker.started.connect(self.on_worker_started)
+        self.worker.progress.connect(self.on_worker_progress)
+        self.worker.finished.connect(self.on_worker_finished)
+        self.worker.error.connect(self.on_worker_error)
+
+        self.worker.moveToThread(self.worker_thread)
+        self.worker_thread.started.connect(self.worker.run)
+        self.worker.finished.connect(self.worker_thread.quit)
+        self.worker.error.connect(self.worker_thread.quit)
+
+        self.worker.finished.connect(self.worker.deleteLater)
+        self.worker.error.connect(self.worker.deleteLater)
+        self.worker_thread.finished.connect(self.worker_thread.deleteLater)
+
+        self.worker_thread.start()
+
+    def on_worker_started(self, message: str):
+        self.status_label.setText(message)
+
+    def on_worker_progress(self, value: int, message: str):
+        self.progress_bar.setValue(value)
+        self.status_label.setText(message)
+
+    def on_worker_finished(self, message: str):
+        self.status_label.setText(message)
+        self.progress_bar.setVisible(False)
+        self.download_button.setEnabled(True)
+        self.worker = None
+        self.worker_thread = None
+
+    def on_worker_error(self, message: str):
+        self.status_label.setText(message)
+        self.progress_bar.setVisible(False)
+        self.download_button.setEnabled(True)
+        self.worker = None
+        self.worker_thread = None
 
     def apply_styles(self):
         self.setStyleSheet("""
@@ -156,7 +230,7 @@ class MainWindow(QMainWindow):
                 font-weight: bold;
             }
 
-            QLineEdit, QComboBox {
+            QLineEdit, QComboBox, QProgressBar {
                 background-color: #1F2937;
                 border: 1px solid #374151;
                 border-radius: 8px;
@@ -166,6 +240,11 @@ class MainWindow(QMainWindow):
 
             QLineEdit:focus, QComboBox:focus {
                 border: 1px solid #3B82F6;
+            }
+
+            #status_label {
+                color: #A5F3FC;
+                padding-top: 4px;
             }
 
             #primary_button {
@@ -178,5 +257,10 @@ class MainWindow(QMainWindow):
 
             #primary_button:hover {
                 background-color: #1D4ED8;
+            }
+
+            #primary_button:disabled {
+                background-color: #374151;
+                color: #94A3B8;
             }
         """)
