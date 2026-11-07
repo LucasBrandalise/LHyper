@@ -3,19 +3,19 @@ from pathlib import Path
 
 from PySide6.QtCore import QThread
 from PySide6.QtWidgets import (
-    QComboBox,
     QFrame,
     QHBoxLayout,
     QLabel,
-    QLineEdit,
     QMainWindow,
-    QProgressBar,
     QPushButton,
+    QTabWidget,
     QVBoxLayout,
     QWidget,
 )
 
 from app.services.youtube_service import YouTubeService
+from app.ui.tabs.downloads_tab import DownloadsTab
+from app.ui.tabs.preview_tab import PreviewTab
 from app.workers.download_worker import DownloadWorker
 
 
@@ -28,6 +28,9 @@ class MainWindow(QMainWindow):
         self.service = YouTubeService()
         self.worker = None
         self.worker_thread = None
+
+        self.preview_tab = PreviewTab(self.output_dir)
+        self.downloads_tab = DownloadsTab(self.output_dir)
 
         self.setWindowTitle("YT Downloader")
         self.resize(1100, 720)
@@ -49,16 +52,17 @@ class MainWindow(QMainWindow):
         sidebar.setFixedWidth(220)
 
         sidebar_layout = QVBoxLayout(sidebar)
-
         logo = QLabel("YT Downloader")
         logo.setObjectName("logo")
-
         sidebar_layout.addWidget(logo)
         sidebar_layout.addSpacing(30)
 
-        for name in ["Início", "Downloads", "Histórico", "Configurações"]:
+        nav_items = ["Início", "Downloads", "Histórico", "Configurações"]
+        for index, name in enumerate(nav_items):
             button = QPushButton(name)
             button.setObjectName("nav_button")
+            target_index = 0 if name == "Início" else 1 if name == "Downloads" else 0
+            button.clicked.connect(lambda checked, idx=target_index: self.tab_widget.setCurrentIndex(idx))
             sidebar_layout.addWidget(button)
 
         sidebar_layout.addStretch()
@@ -67,78 +71,33 @@ class MainWindow(QMainWindow):
         version.setObjectName("version")
         sidebar_layout.addWidget(version)
 
-        content = QWidget()
-        content_layout = QVBoxLayout(content)
-        content_layout.setContentsMargins(40, 35, 40, 35)
-        content_layout.setSpacing(18)
+        self.tab_widget = QTabWidget()
+        self.tab_widget.setTabBarAutoHide(False)
+        self.tab_widget.addTab(self.preview_tab, "Preview")
+        self.tab_widget.addTab(self.downloads_tab, "Downloads")
 
-        title = QLabel("Baixe seus conteúdos.")
-        title.setObjectName("title")
-
-        subtitle = QLabel("Cole um link do YouTube para começar.")
-        subtitle.setObjectName("subtitle")
-
-        self.url_input = QLineEdit()
-        self.url_input.setPlaceholderText("https://www.youtube.com/watch?v=...")
-        self.url_input.setMinimumHeight(48)
-        self.url_input.returnPressed.connect(self.handle_download)
-
-        self.format_select = QComboBox()
-        self.format_select.addItems(["MP4 - Vídeo", "MP3 - Áudio"])
-        self.format_select.setMinimumHeight(42)
-
-        self.progress_bar = QProgressBar()
-        self.progress_bar.setRange(0, 100)
-        self.progress_bar.setValue(0)
-        self.progress_bar.setVisible(False)
-
-        self.status_label = QLabel("Pronto para começar.")
-        self.status_label.setObjectName("status_label")
-
-        self.download_button = QPushButton("Analisar conteúdo")
-        self.download_button.setObjectName("primary_button")
-        self.download_button.setMinimumHeight(48)
-        self.download_button.clicked.connect(self.handle_download)
-
-        content_layout.addWidget(title)
-        content_layout.addWidget(subtitle)
-        content_layout.addSpacing(20)
-        content_layout.addWidget(QLabel("URL DO CONTEÚDO"))
-        content_layout.addWidget(self.url_input)
-        content_layout.addWidget(QLabel("FORMATO"))
-        content_layout.addWidget(self.format_select)
-        content_layout.addWidget(self.progress_bar)
-        content_layout.addWidget(self.status_label)
-        content_layout.addWidget(self.download_button)
-
-        content_layout.addSpacing(35)
-
-        history_title = QLabel("Downloads recentes")
-        history_title.setObjectName("section_title")
-
-        content_layout.addWidget(history_title)
-        content_layout.addStretch()
+        self.preview_tab.download_requested.connect(self.handle_download)
 
         main_layout.addWidget(sidebar)
-        main_layout.addWidget(content)
+        main_layout.addWidget(self.tab_widget)
 
     def handle_download(self):
         if self.worker_thread is not None and self.worker_thread.isRunning():
             return
 
-        url = self.url_input.text().strip()
+        url = self.preview_tab.get_url()
         try:
             self.service.validate_url(url)
         except ValueError as exc:
-            self.status_label.setText(str(exc))
+            self.preview_tab.set_status(str(exc))
             return
 
-        self.status_label.setText("Preparando download...")
-        self.download_button.setEnabled(False)
-        self.progress_bar.setValue(0)
-        self.progress_bar.setVisible(True)
+        self.preview_tab.set_status("Preparando download...")
+        self.preview_tab.set_button_enabled(False)
+        self.preview_tab.set_progress(0)
+        self.preview_tab.set_progress_visible(True)
 
-        self.worker = DownloadWorker(url, self.format_select.currentText(), self.output_dir)
+        self.worker = DownloadWorker(url, self.preview_tab.get_format(), self.output_dir)
         self.worker_thread = QThread(self)
 
         self.worker.started.connect(self.on_worker_started)
@@ -158,23 +117,25 @@ class MainWindow(QMainWindow):
         self.worker_thread.start()
 
     def on_worker_started(self, message: str):
-        self.status_label.setText(message)
+        self.preview_tab.set_status(message)
 
     def on_worker_progress(self, value: int, message: str):
-        self.progress_bar.setValue(value)
-        self.status_label.setText(message)
+        self.preview_tab.set_progress(value)
+        self.preview_tab.set_status(message)
 
     def on_worker_finished(self, message: str):
-        self.status_label.setText(message)
-        self.progress_bar.setVisible(False)
-        self.download_button.setEnabled(True)
+        self.preview_tab.set_status(message)
+        self.preview_tab.set_progress_visible(False)
+        self.preview_tab.set_button_enabled(True)
+        self.downloads_tab.refresh()
         self.worker = None
         self.worker_thread = None
 
     def on_worker_error(self, message: str):
-        self.status_label.setText(message)
-        self.progress_bar.setVisible(False)
-        self.download_button.setEnabled(True)
+        self.preview_tab.set_status(message)
+        self.preview_tab.set_progress_visible(False)
+        self.preview_tab.set_button_enabled(True)
+        self.downloads_tab.refresh()
         self.worker = None
         self.worker_thread = None
 
@@ -228,6 +189,26 @@ class MainWindow(QMainWindow):
             #section_title {
                 font-size: 19px;
                 font-weight: bold;
+            }
+
+            QTabWidget::pane {
+                border: none;
+                background: transparent;
+            }
+
+            QTabBar::tab {
+                background: #0B1220;
+                color: #AAB5C5;
+                padding: 10px 18px;
+                border: 1px solid #263244;
+                border-bottom: none;
+                margin-right: 4px;
+            }
+
+            QTabBar::tab:selected {
+                background: #111827;
+                color: white;
+                border-bottom: 2px solid #2563EB;
             }
 
             QLineEdit, QComboBox, QProgressBar {
