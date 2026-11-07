@@ -7,7 +7,7 @@ import sys
 from datetime import datetime
 
 from PySide6.QtCore import QObject, Qt, QThread, QUrl
-from PySide6.QtGui import QDesktopServices
+from PySide6.QtGui import QDesktopServices, QIcon
 from PySide6.QtWidgets import (
     QButtonGroup,
     QFrame,
@@ -84,6 +84,7 @@ class MainWindow(QMainWindow):
         self.preview.set_ffmpeg_available(YouTubeService.ffmpeg_available())
 
         self.setWindowTitle(APP_TITLE)
+        self.setWindowIcon(QIcon(theme.app_icon_path()))
         self.resize(1200, 800)
         self.setMinimumSize(860, 620)
 
@@ -130,7 +131,7 @@ class MainWindow(QMainWindow):
         layout.setContentsMargins(24, 0, 24, 0)
         layout.setSpacing(8)
 
-        layout.addWidget(LogoMark(20))
+        layout.addWidget(LogoMark(32))
         logo = QLabel(APP_TITLE)
         logo.setObjectName("wordmark")
         layout.addWidget(logo)

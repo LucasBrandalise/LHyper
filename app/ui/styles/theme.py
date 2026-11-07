@@ -1,9 +1,10 @@
 """Design tokens, fontes e folha de estilo (QSS) do LHyper.
 
-Direção: uma ferramenta rápida, exata e silenciosa, como uma mesa de edição à
-noite. Superfícies em grafite neutro, um único acento laranja (a cor da marca)
-usado só na ação principal, na seleção e no número que importa. Números de
-mídia (duração, tamanho, velocidade) em fonte mono, como um timecode.
+Direção: uma ferramenta rápida, exata e silenciosa, com o óculos pixelado do
+ícone como marca. Superfícies em um escuro levemente quente, um único acento
+branco-osso (o branco do ícone) usado só na ação principal, na seleção e no
+número que importa. Títulos e números em fonte pixel (Departure Mono), cantos
+retos e barras em blocos, como em uma tela de baixa resolução.
 
 Valores baseados no unslop de Damir Sokolovsky (@heydamir), CC BY 4.0.
 """
@@ -15,24 +16,25 @@ from PySide6.QtGui import QFont, QFontDatabase
 
 from app.core.paths import resource_path
 
-# ---------------------------------------------------------------------- rampa grafite
-BG_DEEP = "#0F0F10"      # barra superior e rodapé
-BG = "#141415"           # fundo da página
-SURFACE = "#19191B"      # cartões
-SURFACE_2 = "#232325"    # elevado: campos, linha ativa
-SURFACE_3 = "#2A2A2D"    # hover sobre elevado
-HAIRLINE = "rgba(237, 237, 237, 0.08)"
-HAIRLINE_STRONG = "rgba(237, 237, 237, 0.14)"
+# ---------------------------------------------------------------------- rampa escura quente
+BG_DEEP = "#100F0E"      # barra superior e rodapé
+BG = "#151413"           # fundo da página
+SURFACE = "#1B1A18"      # cartões
+SURFACE_2 = "#252321"    # elevado: campos, linha ativa
+SURFACE_3 = "#2E2C29"    # hover sobre elevado
+HAIRLINE = "rgba(239, 233, 222, 0.08)"
+HAIRLINE_STRONG = "rgba(239, 233, 222, 0.15)"
 
-TEXT = "#EDEDED"
-TEXT_2 = "#A1A1A6"
-TEXT_3 = "#85858B"
+TEXT = "#EFE9DE"
+TEXT_2 = "#AAA398"
+TEXT_3 = "#8A847A"
 
 # ---------------------------------------------------------------------- acento e semânticas
-ACCENT = "#FF570A"
-ACCENT_HOVER = "#FF6A26"
-ACCENT_PRESSED = "#E84E08"
-ON_ACCENT = "#141415"    # texto escuro sobre o laranja (contraste > 4.5:1)
+ACCENT = "#F5F3EE"       # branco-osso do ícone
+ACCENT_HOVER = "#FFFFFF"
+ACCENT_PRESSED = "#D8D3C8"
+ACCENT_SHADE = "#B9B4A9"  # sombra cinza-quente do ícone
+ON_ACCENT = "#0A0A0A"     # texto escuro sobre o acento claro
 POSITIVE = "#4CC38A"
 NEGATIVE = "#E5484D"
 CAUTION = "#D9A54A"
@@ -46,10 +48,12 @@ BORDER = HAIRLINE
 BORDER_STRONG = HAIRLINE_STRONG
 
 # ---------------------------------------------------------------------- forma
-RADIUS_PANEL = 14
-RADIUS_CARD = 12
-RADIUS_CONTROL = 8
-RADIUS_SMALL = 6
+# Cantos curtos: combinam com o estilo pixel sem ficar duros demais
+RADIUS_PANEL = 8
+RADIUS_CARD = 6
+RADIUS_CONTROL = 4
+RADIUS_SMALL = 2
+PIXEL = 2  # unidade de "pixel" usada nos desenhos (barras, spinner, pontos)
 RADIUS_LG = RADIUS_PANEL
 RADIUS_MD = RADIUS_CARD
 RADIUS_SM = RADIUS_CONTROL
@@ -59,9 +63,9 @@ EASE_DURATION_FAST = 150
 EASE_DURATION_ENTER = 300
 
 FONT_FAMILY = "Inter"
-MONO_FAMILY = "JetBrains Mono"
+MONO_FAMILY = "Departure Mono"
 _FALLBACK_FAMILIES = ["Inter", "Segoe UI Variable Text", "Segoe UI", "sans-serif"]
-_FALLBACK_MONO = ["JetBrains Mono", "Cascadia Mono", "Consolas", "monospace"]
+_FALLBACK_MONO = ["Departure Mono", "JetBrains Mono", "Cascadia Mono", "Consolas", "monospace"]
 
 
 def load_fonts() -> str:
@@ -69,7 +73,7 @@ def load_fonts() -> str:
     global FONT_FAMILY, MONO_FAMILY
     fonts_dir = Path(resource_path("assets/fonts"))
     if fonts_dir.is_dir():
-        for font_file in sorted(fonts_dir.glob("*.ttf")):
+        for font_file in sorted([*fonts_dir.glob("*.ttf"), *fonts_dir.glob("*.otf")]):
             QFontDatabase.addApplicationFont(str(font_file))
     available = set(QFontDatabase.families())
     FONT_FAMILY = next((f for f in _FALLBACK_FAMILIES if f in available), "sans-serif")
@@ -82,7 +86,13 @@ def mono_font(pixel_size: int = 12, weight: QFont.Weight = QFont.Weight.Normal) 
     font.setPixelSize(pixel_size)
     font.setWeight(weight)
     font.setStyleHint(QFont.StyleHint.Monospace)
+    # Fonte pixel: sem suavização de hinting extra, para manter os blocos nítidos
+    font.setHintingPreference(QFont.HintingPreference.PreferFullHinting)
     return font
+
+
+def app_icon_path() -> str:
+    return resource_path("assets/icons/favicon.ico")
 
 
 def stylesheet() -> str:
@@ -112,8 +122,8 @@ def stylesheet() -> str:
         border-bottom: 1px solid {HAIRLINE};
     }}
     #wordmark {{
-        font-size: 16px;
-        font-weight: 600;
+        font-family: "{mono}";
+        font-size: 22px;
         color: {TEXT};
     }}
     #nav_button {{
@@ -131,7 +141,7 @@ def stylesheet() -> str:
         color: {TEXT};
         background-color: {SURFACE_2};
         border: 1px solid {HAIRLINE};
-        border-top: 1px solid rgba(255, 255, 255, 0.10);
+        border-top: 1px solid rgba(255, 255, 255, 0.08);
     }}
     #nav_button:focus {{ border: 1px solid {HAIRLINE_STRONG}; }}
 
@@ -142,7 +152,7 @@ def stylesheet() -> str:
     }}
     #footer_text {{ color: {TEXT_2}; font-size: 12px; }}
     #footer_muted {{ color: {TEXT_3}; font-size: 12px; }}
-    #footer_mono {{ color: {TEXT_3}; font-size: 12px; font-family: "{mono}"; }}
+    #footer_mono {{ color: {TEXT_3}; font-size: 11px; font-family: "{mono}"; }}
     #footer_link {{
         background: transparent;
         border: none;
@@ -155,12 +165,12 @@ def stylesheet() -> str:
     #footer_link:hover {{ color: {TEXT}; background: {SURFACE}; }}
 
     /* ------------------------------------------------------------ tipografia */
-    #page_title {{ font-size: 28px; font-weight: 500; }}
-    #hero_title {{ font-size: 28px; font-weight: 500; }}
+    #page_title {{ font-family: "{mono}"; font-size: 33px; font-weight: 400; }}
+    #hero_title {{ font-family: "{mono}"; font-size: 33px; font-weight: 400; }}
     #card_title {{ font-size: 15px; font-weight: 500; }}
     #subtitle, #muted {{ color: {TEXT_2}; font-size: 14px; }}
     #meta {{ color: {TEXT_3}; font-size: 12px; }}
-    #mono_meta {{ color: {TEXT_2}; font-size: 12px; font-family: "{mono}"; }}
+    #mono_meta {{ color: {TEXT_2}; font-size: 11px; font-family: "{mono}"; }}
     #field_label {{ color: {TEXT_2}; font-size: 13px; font-weight: 500; }}
     #videoTitle {{ font-size: 16px; font-weight: 500; color: {TEXT}; }}
     #videoTitle[empty="true"] {{ color: {TEXT_3}; font-weight: 400; }}
@@ -259,7 +269,7 @@ def stylesheet() -> str:
     }}
     #download_row:hover {{ background-color: {SURFACE}; }}
     #row_title {{ font-size: 14px; font-weight: 500; }}
-    #row_meta {{ color: {TEXT_3}; font-size: 12px; font-family: "{mono}"; }}
+    #row_meta {{ color: {TEXT_3}; font-size: 11px; font-family: "{mono}"; }}
     #download_status_completed, #download_status_error, #download_status_missing {{
         color: {TEXT_2};
         font-size: 13px;
@@ -271,8 +281,6 @@ def stylesheet() -> str:
         background-color: {SURFACE_2};
         border: none;
         border-radius: 2px;
-        min-height: 4px;
-        max-height: 4px;
         color: transparent;
     }}
     QProgressBar::chunk {{ border-radius: 2px; background: {ACCENT}; }}

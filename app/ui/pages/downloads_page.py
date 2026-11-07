@@ -84,7 +84,7 @@ class _MediaTile(QWidget):
         p.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
         rect = QRectF(self.rect()).adjusted(0.5, 0.5, -0.5, -0.5)
         path = QPainterPath()
-        path.addRoundedRect(rect, 6, 6)
+        path.addRoundedRect(rect, theme.RADIUS_SMALL, theme.RADIUS_SMALL)
         p.setClipPath(path)
         if self._pixmap is not None:
             src = self._pixmap

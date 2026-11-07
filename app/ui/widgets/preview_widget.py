@@ -25,7 +25,7 @@ from app.core.constants import (
 )
 from app.core.models import VideoInfo
 from app.ui.components import icons
-from app.ui.components.controls import AnimatedProgressBar, PrimaryButton, SegmentedControl
+from app.ui.components.controls import AnimatedProgressBar, PrimaryButton, SegmentedControl, pixel_icon
 from app.ui.styles import theme
 
 PLACEHOLDER_TITLE = "O título do vídeo aparece aqui"
@@ -71,6 +71,7 @@ class ThumbnailLabel(QLabel):
         self._loading = False
         self._phase = 0.0
         self._timecode = ""
+        self._goggles: QPixmap | None = None
         self.setMinimumWidth(self.MIN_WIDTH)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         self.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -140,7 +141,7 @@ class ThumbnailLabel(QLabel):
                 p.fillRect(QRectF(x + i * band / 24, rect.top(), band / 24 + 1, rect.height()), QColor(255, 255, 255, alpha))
             self._paint_caption(p, rect, "Buscando informações do vídeo", None)
         else:
-            self._paint_caption(p, rect, self._fallback, "play")
+            self._paint_caption(p, rect, self._fallback, "goggles")
 
         p.setClipping(False)
         p.setPen(QPen(QColor(237, 237, 237, 20), 1))
@@ -149,29 +150,33 @@ class ThumbnailLabel(QLabel):
         p.end()
 
     def _paint_timecode(self, p: QPainter, rect: QRectF):
-        font = theme.mono_font(12, QFont.Weight.Medium)
+        font = theme.mono_font(11)
         fm = QFontMetrics(font)
         w = fm.horizontalAdvance(self._timecode) + 12
         box = QRectF(rect.right() - w - 8, rect.bottom() - 20 - 8, w, 20)
         p.setPen(Qt.PenStyle.NoPen)
         p.setBrush(QColor(15, 15, 16, 210))
-        p.drawRoundedRect(box, 4, 4)
+        p.drawRect(box)
         p.setFont(font)
         p.setPen(QColor(theme.TEXT))
         p.drawText(box, Qt.AlignmentFlag.AlignCenter, self._timecode)
 
     def _paint_caption(self, p: QPainter, rect: QRectF, text: str, icon_name: str | None):
-        c = QPointF(rect.center().x(), rect.center().y() - (12 if icon_name else 0))
-        if icon_name:
-            p.setPen(QPen(QColor(237, 237, 237, 28), 1))
-            p.setBrush(QColor(theme.SURFACE))
-            p.drawEllipse(c, 20, 20)
-            p.drawPixmap(QPointF(c.x() - 7, c.y() - 8), icons.pixmap(icon_name, theme.TEXT_3, 16))
+        c = QPointF(rect.center().x(), rect.center().y() - (16 if icon_name else 0))
+        if icon_name == "goggles":
+            # O óculos do ícone em 2x, nítido, como mascote do estado vazio
+            if self._goggles is None:
+                self._goggles = pixel_icon(64)
+            p.setOpacity(0.55)
+            p.drawPixmap(QPointF(round(c.x() - 32), round(c.y() - 32)), self._goggles)
+            p.setOpacity(1.0)
+        elif icon_name:
+            p.drawPixmap(QPointF(c.x() - 8, c.y() - 8), icons.pixmap(icon_name, theme.TEXT_3, 16))
         font = QFont(self.font())
         font.setPixelSize(13)
         p.setFont(font)
         p.setPen(QColor(theme.TEXT_3))
-        top = c.y() + (32 if icon_name else -10)
+        top = c.y() + (36 if icon_name else -10)
         p.drawText(QRectF(rect.left() + 16, top, rect.width() - 32, 20), Qt.AlignmentFlag.AlignHCenter, text)
 
 
@@ -365,7 +370,7 @@ class PreviewWidget(QWidget):
         self.percent_label = QLabel("")
         self.percent_label.setObjectName("percent_label")
         self.percent_label.setStyleSheet(
-            f'color:{theme.ACCENT}; font-family:"{theme.MONO_FAMILY}"; font-size:28px; font-weight:500;'
+            f'color:{theme.ACCENT}; font-family:"{theme.MONO_FAMILY}"; font-size:33px; font-weight:400;'
         )
         self.percent_label.setVisible(False)
         layout.addSpacing(8)

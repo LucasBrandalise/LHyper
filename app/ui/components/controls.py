@@ -17,7 +17,7 @@ from PySide6.QtCore import (
     QVariantAnimation,
     Signal,
 )
-from PySide6.QtGui import QColor, QFont, QPainter, QPainterPath, QPen
+from PySide6.QtGui import QColor, QFont, QIcon, QPainter, QPainterPath, QPen, QPixmap
 from PySide6.QtWidgets import (
     QGraphicsOpacityEffect,
     QHBoxLayout,
@@ -67,7 +67,7 @@ class PrimaryButton(QPushButton):
         self._hover_anim.valueChanged.connect(self._set_hover)
 
         # O giro só existe enquanto há um download de fato em andamento.
-        self._spin_timer = QTimer(self, interval=16)
+        self._spin_timer = QTimer(self, interval=90)
         self._spin_timer.timeout.connect(self._tick_spin)
 
     def set_loading(self, loading: bool, text: str | None = None):
@@ -81,7 +81,7 @@ class PrimaryButton(QPushButton):
         return self._loading
 
     def _tick_spin(self):
-        self._spin = (self._spin + 6) % 360
+        self._spin = (self._spin + 1) % 8
         self.update()
 
     def _set_hover(self, value):
@@ -155,15 +155,21 @@ class PrimaryButton(QPushButton):
         fm = p.fontMetrics()
         text_w = fm.horizontalAdvance(text)
         icon_w = 16 if (self._loading or self._icon_name) else 0
-        gap = 8 if icon_w and text else 0
+        gap = (12 if self._loading else 8) if icon_w and text else 0
         x = rect.center().x() - (icon_w + gap + text_w) / 2
         cy = rect.center().y()
 
         if self._loading:
-            pen = QPen(fg, 1.5)
-            pen.setCapStyle(Qt.PenCapStyle.RoundCap)
-            p.setPen(pen)
-            p.drawArc(QRectF(x + 2, cy - 6, 12, 12), int(-self._spin * 16), 270 * 16)
+            # Spinner pixelado: 8 blocos em volta de uma grade 3x3, com rastro
+            cells = [(0, 0), (1, 0), (2, 0), (2, 1), (2, 2), (1, 2), (0, 2), (0, 1)]
+            block, spacing = 4, 2
+            ox, oy = round(x + 1), round(cy - (3 * block + 2 * spacing) / 2)
+            p.setPen(Qt.PenStyle.NoPen)
+            for i, (cx_, cy_) in enumerate(cells):
+                age = (self._spin - i) % 8
+                color = QColor(fg)
+                color.setAlphaF(max(0.15, 1.0 - age * 0.28))
+                p.fillRect(ox + cx_ * (block + spacing), oy + cy_ * (block + spacing), block, block, color)
         elif self._icon_name:
             p.drawPixmap(QPointF(x, cy - 8), icons.pixmap(self._icon_name, fg.name(), 16))
 
@@ -183,7 +189,7 @@ class AnimatedProgressBar(QProgressBar):
         super().__init__(parent)
         self.setRange(0, 100)
         self.setTextVisible(False)
-        self.setFixedHeight(4)
+        self.setFixedHeight(10)
         self._display = 0.0
         self._phase = 0.0
         self._busy = False
@@ -240,32 +246,42 @@ class AnimatedProgressBar(QProgressBar):
         super().hideEvent(event)
 
     def _tick(self):
-        self._phase = (self._phase + 0.015) % 1.0
+        self._phase = (self._phase + 0.02) % 1.0
         self.update()
 
+    BLOCK = 10
+    GAP = 3
+
     def paintEvent(self, event):
+        # Barra em blocos, como um medidor de baixa resolução (sem antialiasing)
         p = QPainter(self)
-        p.setRenderHint(QPainter.RenderHint.Antialiasing)
-        rect = QRectF(self.rect())
-        r = rect.height() / 2
-        track = QPainterPath()
-        track.addRoundedRect(rect, r, r)
-        p.fillPath(track, QColor(theme.SURFACE_2))
+        h = self.height()
+        step = self.BLOCK + self.GAP
+        count = max(1, (self.width() + self.GAP) // step)
+        empty = QColor(theme.SURFACE_2)
 
         if self._indeterminate():
-            seg_w = rect.width() * 0.24
-            x = -seg_w + (rect.width() + seg_w) * self._phase
-            p.setClipPath(track)
-            p.fillRect(QRectF(x, 0, seg_w, rect.height()), QColor(theme.TEXT_3))
+            head = int(self._phase * (count + 4))
+            for i in range(count):
+                lit = head - 4 <= i < head
+                p.fillRect(i * step, 0, self.BLOCK, h, QColor(theme.TEXT_3) if lit else empty)
             p.end()
             return
 
         span = max(1, self.maximum() - self.minimum())
         fraction = max(0.0, min(1.0, (self._display - self.minimum()) / span))
-        if fraction > 0:
-            fill = QPainterPath()
-            fill.addRoundedRect(QRectF(0, 0, max(rect.height(), rect.width() * fraction), rect.height()), r, r)
-            p.fillPath(fill, QColor(theme.ACCENT))
+        filled = fraction * count
+        full = int(filled)
+        for i in range(count):
+            x = i * step
+            p.fillRect(x, 0, self.BLOCK, h, empty)
+            if i < full:
+                p.fillRect(x, 0, self.BLOCK, h, QColor(theme.ACCENT))
+            elif i == full and filled - full > 0:
+                # bloco parcial em meio-tom, mantendo o visual pixelado
+                partial = QColor(theme.ACCENT_SHADE)
+                partial.setAlphaF(0.35 + 0.65 * (filled - full))
+                p.fillRect(x, 0, self.BLOCK, h, partial)
         p.end()
 
 
@@ -279,7 +295,7 @@ class SegmentedControl(QWidget):
     """
 
     currentIndexChanged = Signal(int)
-    OUTER_RADIUS = 10
+    OUTER_RADIUS = 6
     PADDING = 4
 
     def __init__(self, parent=None):
@@ -390,7 +406,7 @@ class SegmentedControl(QWidget):
         p = QPainter(self)
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
         outer = QRectF(self.rect()).adjusted(0.5, 0.5, -0.5, -0.5)
-        p.setPen(QPen(QColor(237, 237, 237, 20), 1))
+        p.setPen(QPen(QColor(239, 233, 222, 20), 1))
         p.setBrush(QColor(theme.BG))
         p.drawRoundedRect(outer, self.OUTER_RADIUS, self.OUTER_RADIUS)
         if 0 <= self._index < len(self._buttons):
@@ -453,8 +469,9 @@ class StatusDot(QWidget):
         color.setAlphaF(self._opacity)
         p.setPen(Qt.PenStyle.NoPen)
         p.setBrush(color)
-        r = min(self.width(), self.height()) / 2
-        p.drawEllipse(QPointF(self.width() / 2, self.height() / 2), r, r)
+        # Ponto quadrado: um "pixel" grande, coerente com o ícone
+        side = min(self.width(), self.height())
+        p.drawRect(QRectF((self.width() - side) / 2, (self.height() - side) / 2, side, side))
         p.end()
 
 
@@ -492,22 +509,24 @@ class FadeStackedWidget(QStackedWidget):
 
 # ====================================================================== logotipo
 class LogoMark(QWidget):
-    """Marca plana: seta de download sobre uma linha de base, em laranja sólido."""
+    """Marca do LHyper: o óculos pixelado do ícone, desenhado sem suavização."""
 
-    def __init__(self, size: int = 20, parent=None):
+    def __init__(self, size: int = 32, parent=None):
         super().__init__(parent)
         self.setFixedSize(size, size)
+        self._pixmap = pixel_icon(size)
 
     def paintEvent(self, event):
         p = QPainter(self)
-        p.setRenderHint(QPainter.RenderHint.Antialiasing)
-        s = float(min(self.width(), self.height()))
-        pen = QPen(QColor(theme.ACCENT), s * 0.12)
-        pen.setCapStyle(Qt.PenCapStyle.RoundCap)
-        pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
-        p.setPen(pen)
-        cx = s / 2
-        p.drawLine(QPointF(cx, s * 0.14), QPointF(cx, s * 0.62))
-        p.drawPolyline([QPointF(s * 0.28, s * 0.42), QPointF(cx, s * 0.64), QPointF(s * 0.72, s * 0.42)])
-        p.drawLine(QPointF(s * 0.16, s * 0.86), QPointF(s * 0.84, s * 0.86))
+        p.drawPixmap(0, 0, self._pixmap)
         p.end()
+
+
+def pixel_icon(size: int = 32) -> QPixmap:
+    """Ícone do app ampliado por vizinho mais próximo (múltiplos de 32 ficam perfeitos)."""
+    source = QIcon(theme.app_icon_path()).pixmap(32, 32)
+    if source.isNull():
+        return QPixmap()
+    if source.width() != size:
+        source = source.scaled(size, size, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.FastTransformation)
+    return source
