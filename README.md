@@ -4,7 +4,7 @@ Aplicativo desktop em Python + PySide6 para baixar vídeos do YouTube em MP4 ou 
 
 ## Versão atual
 
-0.2.5
+0.2.6
 
 ## Baixar o executável (mais fácil)
 
