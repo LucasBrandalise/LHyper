@@ -2,6 +2,10 @@
 
 Aplicativo desktop em Python + PySide6 para baixar vídeos e converter áudio.
 
+## Versão atual
+
+0.2.0
+
 ## Requisitos
 
 - Python 3.14

@@ -76,7 +76,7 @@ class MainWindow(QMainWindow):
 
         sidebar_layout.addStretch()
 
-        version = QLabel("Version 0.1.0")
+        version = QLabel("Version 0.2.0")
         version.setObjectName("version")
         sidebar_layout.addWidget(version)
 
@@ -86,9 +86,24 @@ class MainWindow(QMainWindow):
         self.tab_widget.addTab(self.downloads_tab, "Downloads")
 
         self.preview_tab.download_requested.connect(self.handle_download)
+        self.preview_tab.url_input.editingFinished.connect(self.refresh_preview_from_url)
 
         main_layout.addWidget(sidebar)
         main_layout.addWidget(self.tab_widget)
+
+    def refresh_preview_from_url(self):
+        url = self.preview_tab.get_url()
+        try:
+            info = self.service.extract_info(url)
+            self.preview_tab.set_video_info(info.title, info.thumbnail)
+            self.current_download_title = info.title
+            self.current_download_url = url
+            self.current_download_format = self.preview_tab.get_format().split(" - ", 1)[0].lower()
+            self.preview_tab.set_status("Preview atualizado.")
+        except ValueError as exc:
+            self.preview_tab.set_status(str(exc))
+        except Exception as exc:
+            self.preview_tab.set_status(str(exc))
 
     def handle_download(self):
         if self.worker_thread is not None and self.worker_thread.isRunning():
@@ -98,6 +113,7 @@ class MainWindow(QMainWindow):
         try:
             self.service.validate_url(url)
             info = self.service.extract_info(url)
+            self.preview_tab.set_video_info(info.title, info.thumbnail)
             self.current_download_title = info.title
             self.current_download_url = url
             self.current_download_format = self.preview_tab.get_format().split(" - ", 1)[0].lower()
